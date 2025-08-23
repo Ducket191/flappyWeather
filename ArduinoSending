@@ -1,0 +1,25 @@
+#include <ArduinoJson.h>
+const int lightPin = 8; 
+const int ledPin = 13; 
+int value = 0;  
+
+StaticJsonDocument<100> doc;
+
+void setup() {
+  pinMode(lightPin, INPUT);
+  Serial.begin(9600);
+  pinMode(ledPin, OUTPUT);
+}
+
+void loop() {
+  value = digitalRead(lightPin);
+
+  if (value == LOW) {
+    digitalWrite(ledPin, HIGH);
+  } else {
+    digitalWrite(ledPin, LOW);
+  }
+  doc["data"] = value;
+  serializeJson(doc, Serial);
+  delay(200);
+}
