@@ -4,67 +4,72 @@
 
 const char* ssid = "IoT LAB";
 const char* password = "kvt1ptit";
-const char* serverUrl = "http://192.168.76.120:5000/api/data"; // check again if PC IP changes
+const char* serverUrl = "http://192.168.76.120:5000/api/ledState";  
 
 WiFiClient client;
-StaticJsonDocument<100> doc;
+StaticJsonDocument<200> doc;
+
+const int ledPin = D4;  // GPIO2 (built-in LED on NodeMCU)
 
 void setup() {
-  Serial.begin(9600);
-  WiFi.begin(ssid, password);
+  Serial.begin(9600);   // Serial to Arduino
+  pinMode(ledPin, OUTPUT);
 
+  WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-
-  Serial.println("\nWiFi connected");
-  Serial.println("IP: " + WiFi.localIP().toString());
+  Serial.println("\n WiFi connected");
+  Serial.print("IP: ");
+  Serial.println(WiFi.localIP());
 }
 
 void loop() {
-  while (Serial.available() > 0) {
-    if (WiFi.status() != WL_CONNECTED) {
-      Serial.println("WiFi not connected, retrying...");
-      WiFi.begin(ssid, password);
-      delay(1000);
-      return;
-    }
-
-    // Read JSON line from Serial
-    String data = Serial.readStringUntil('\n');
-    DeserializationError error = deserializeJson(doc, data);
-
-    if (error) {
-      Serial.print("JSON parse failed: ");
-      Serial.println(error.c_str());
-      return;
-    }
-
-    if (doc.containsKey("data")) {
-      int state = doc["data"];
-      Serial.print("Received data: ");
-      Serial.println(state);
-    }
-
-    // Send to backend
+  if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
-    http.begin(client, serverUrl);   // ✅ Must call this before POST
-    http.addHeader("Content-Type", "application/json");
+    http.begin(client, serverUrl);
 
-    String json;
-    serializeJson(doc, json);
+    int httpCode = http.GET();
 
-    int code = http.POST(json);
-    if (code > 0) {
-      Serial.print("HTTP Response code: ");
-      Serial.println(code);
+    if (httpCode > 0) {
+      String payload = http.getString();
+      Serial.println("Response: " + payload);
+
+      DeserializationError error = deserializeJson(doc, payload);
+      if (!error) {
+        if (doc.containsKey("state")) {
+          int ledState = doc["state"];
+          Serial.print("LED State from server: ");
+          Serial.println(ledState);
+
+          // Control onboard LED
+          if (ledState == 1) {
+            digitalWrite(ledPin, LOW);  // active LOW
+          } else {
+            digitalWrite(ledPin, HIGH);
+          }
+
+          // Send to Arduino as JSON
+          StaticJsonDocument<100> outDoc;
+          outDoc["ledState"] = ledState;
+          serializeJson(outDoc, Serial);
+          Serial.println();  // send newline so Arduino knows the message ended
+        }
+      } else {
+        Serial.print("JSON parse failed: ");
+        Serial.println(error.c_str());
+      }
     } else {
-      Serial.print("Connection failed: ");
-      Serial.println(http.errorToString(code));
+      Serial.print(" HTTP GET failed: ");
+      Serial.println(http.errorToString(httpCode));
     }
 
     http.end();
-    delay(750);
+  } else {
+    Serial.println(" WiFi disconnected, reconnecting...");
+    WiFi.begin(ssid, password);
   }
+
+  delay(2000);
 }
