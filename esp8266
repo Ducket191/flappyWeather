@@ -2,74 +2,48 @@
 #include <ESP8266HTTPClient.h>
 #include <ArduinoJson.h>
 
-const char* ssid = "IoT LAB";
-const char* password = "kvt1ptit";
-const char* serverUrl = "http://192.168.76.120:5000/api/ledState";  
+const char* ssid = "P2105";
+const char* pass = "10112012";
+const char* serverURL = "192.168.1.3/api/data"; //chay ipconfig tren cmd de lay dia chi ip
 
 WiFiClient client;
-StaticJsonDocument<200> doc;
-
-const int ledPin = D4;  // GPIO2 (built-in LED on NodeMCU)
+StaticJsonDocument<100> doc;
 
 void setup() {
-  Serial.begin(9600);   // Serial to Arduino
-  pinMode(ledPin, OUTPUT);
-
+  Serial.begin(9600);
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.print(".");
+    Serial.println(".");
   }
-  Serial.println("\n WiFi connected");
-  Serial.print("IP: ");
-  Serial.println(WiFi.localIP());
+  Serial.println("\nWiFi connected");
+  Serial.println("IP: " + WiFi.localIP().toString());
 }
 
 void loop() {
-  if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
-    http.begin(client, serverUrl);
-
-    int httpCode = http.GET();
-
-    if (httpCode > 0) {
-      String payload = http.getString();
-      Serial.println("Response: " + payload);
-
-      DeserializationError error = deserializeJson(doc, payload);
-      if (!error) {
-        if (doc.containsKey("state")) {
-          int ledState = doc["state"];
-          Serial.print("LED State from server: ");
-          Serial.println(ledState);
-
-          // Control onboard LED
-          if (ledState == 1) {
-            digitalWrite(ledPin, LOW);  // active LOW
-          } else {
-            digitalWrite(ledPin, HIGH);
-          }
-
-          // Send to Arduino as JSON
-          StaticJsonDocument<100> outDoc;
-          outDoc["ledState"] = ledState;
-          serializeJson(outDoc, Serial);
-          Serial.println();  // send newline so Arduino knows the message ended
-        }
-      } else {
-        Serial.print("JSON parse failed: ");
-        Serial.println(error.c_str());
-      }
-    } else {
-      Serial.print(" HTTP GET failed: ");
-      Serial.println(http.errorToString(httpCode));
+  while (Serial.available() > 0) {
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("WiFi not connected");
+      delay(1000);
+      return;
     }
 
-    http.end();
-  } else {
-    Serial.println(" WiFi disconnected, reconnecting...");
-    WiFi.begin(ssid, password);
-  }
+    HTTPClient http
+    http.begin(client, serverURL);
+    http.addHeader("Content-Type", "application/json");
 
-  delay(2000);
+    String data = Serial.readStringUntil('\n');
+    // Đoạn code sau deserialize để mình thêm data các kiểu, nếu không cần chỉnh data thì có thể http.POST luôn, nhưng mà nếu chỉnh xg thì phải serializeJson lại
+    //DeserializationError error = deserializeJson(doc, data);
+
+    //if (error) {
+      //Serial.print("JSON parse failed: ");
+      //Serial.println(error.c_str());
+      //http.end();
+      //return;
+    //}
+    int code = http.POST(data);
+    http.end();
+    delay(750);
+  }
 }
